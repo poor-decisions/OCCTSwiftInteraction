@@ -48,6 +48,18 @@ public struct CADViewportView: View {
     /// `Equatable`, so `[_ViewportBody]` can't be either, and this is what
     /// `.onChange` keys off instead of the array directly.
     private var bodiesIdentity: String {
+        Self.bodiesIdentity(for: bodies)
+    }
+
+    /// The pure key-derivation behind `bodiesIdentity`, pulled out as a
+    /// static function so it's testable without constructing a live view
+    /// (which needs a real `_ViewportController`). This is the contract
+    /// `.onChange(of:)` in `body` relies on to know when `liveBodies` needs
+    /// to be refreshed: if two body sets are meaningfully different (a body
+    /// added, removed, or rebuilt in place) but happen to produce the same
+    /// key here, `liveBodies` silently goes stale again, the same failure
+    /// mode `.constant(bodies)` had.
+    static func bodiesIdentity(for bodies: [_ViewportBody]) -> String {
         bodies.map { "\($0.id):\($0.generation)" }.joined(separator: ",")
     }
 
