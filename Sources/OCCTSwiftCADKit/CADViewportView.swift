@@ -26,6 +26,31 @@ public struct CADViewportView: View {
     public var selection: [PickedEntity]
     public var onClearSelection: (() -> Void)?
 
+    /// A real, live-updating mirror of `bodies`.
+    ///
+    /// `_MetalViewportView`'s `ViewportRenderer` captures the `Binding` it's
+    /// given exactly once, into a stored property, at construction (it's
+    /// only ever constructed once itself, guarded by `renderer == nil` in
+    /// `onAppear`) and reads through that same captured reference on every
+    /// frame after. Handing it `.constant(bodies)` (the previous
+    /// implementation) meant that captured reference's getter permanently
+    /// returned whatever `bodies` happened to be on the very first render:
+    /// structurally, no update after that (a selection highlight appearing,
+    /// any later body change) could ever reach the renderer, not just
+    /// "sometimes didn't." `$liveBodies` is a genuine `Binding` backed by
+    /// persistent `@State`, so the renderer's one-time-captured reference
+    /// keeps reading the current value correctly.
+    @State private var liveBodies: [_ViewportBody] = []
+
+    /// Changes whenever the body *set* changes: which bodies exist (`id`)
+    /// and whether any single one was rebuilt in place (`generation`, a
+    /// monotonic per-body counter). `_ViewportBody` doesn't conform to
+    /// `Equatable`, so `[_ViewportBody]` can't be either, and this is what
+    /// `.onChange` keys off instead of the array directly.
+    private var bodiesIdentity: String {
+        bodies.map { "\($0.id):\($0.generation)" }.joined(separator: ",")
+    }
+
     public init(
         bodies: [_ViewportBody],
         controller: _ViewportController,
@@ -40,10 +65,12 @@ public struct CADViewportView: View {
 
     public var body: some View {
         GeometryReader { proxy in
-            _MetalViewportView(controller: controller, bodies: .constant(bodies))
+            _MetalViewportView(controller: controller, bodies: $liveBodies)
                 .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
+        .onAppear { liveBodies = bodies }
+        .onChange(of: bodiesIdentity) { liveBodies = bodies }
         .overlay(alignment: .top) {
             if selection.count == 1, let entity = selection.first {
                 selectionLabel(entity)
