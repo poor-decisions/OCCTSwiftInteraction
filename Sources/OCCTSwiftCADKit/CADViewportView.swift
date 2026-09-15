@@ -40,7 +40,13 @@ public struct CADViewportView: View {
     /// "sometimes didn't." `$liveBodies` is a genuine `Binding` backed by
     /// persistent `@State`, so the renderer's one-time-captured reference
     /// keeps reading the current value correctly.
-    @State private var liveBodies: [_ViewportBody] = []
+    ///
+    /// Seeded from `bodies` in `init`, not `onAppear`: `_MetalViewportView`'s
+    /// own `onAppear` (which constructs the renderer) can run before this
+    /// view's `onAppear` does, so seeding here instead of there means that
+    /// very first frame already sees the real content instead of an empty
+    /// array.
+    @State private var liveBodies: [_ViewportBody]
 
     /// Changes whenever the body *set* changes: which bodies exist (`id`)
     /// and whether any single one was rebuilt in place (`generation`, a
@@ -73,6 +79,7 @@ public struct CADViewportView: View {
         self.controller = controller
         self.selection = selection
         self.onClearSelection = onClearSelection
+        self._liveBodies = State(initialValue: bodies)
     }
 
     public var body: some View {
@@ -81,8 +88,7 @@ public struct CADViewportView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .clipped()
-        .onAppear { liveBodies = bodies }
-        .onChange(of: bodiesIdentity) { liveBodies = bodies }
+        .onChange(of: bodiesIdentity, initial: false) { _, _ in liveBodies = bodies }
         .overlay(alignment: .top) {
             if selection.count == 1, let entity = selection.first {
                 selectionLabel(entity)
